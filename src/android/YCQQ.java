@@ -3,10 +3,12 @@ package org.zy.yuancheng.qq;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.content.Context;
 
 import com.tencent.connect.common.Constants;
 import com.tencent.connect.share.QQShare;
 import com.tencent.connect.share.QzoneShare;
+import com.tencent.connect.UserInfo;
 import com.tencent.open.GameAppOperation;
 import com.tencent.tauth.IUiListener;
 import com.tencent.tauth.Tencent;
@@ -25,16 +27,18 @@ public class YCQQ extends CordovaPlugin {
 
     private static Tencent mTencent;
     private CallbackContext currentCallbackContext;
+    private Context context;
+    private JSONObject qqRes;
     private String APP_ID;
     private static final String QQ_APP_ID = "qq_app_id";
     private static final String QQ_CANCEL_BY_USER = "cancelled by user";
-    // private static final String QQ_SHARE_ERROR = "error happened when sharing";
-    // private static final String QQ_LOGIN_ERROR = "error happened when logging";
+    private static final String QQ_SHARE_ERROR = "error happened when sharing";
+    private static final String QQ_LOGIN_ERROR = "error happened when logging";
     private static final String QQ_PARAM_ERROR = "param incorrect";
     private static final String QQ_RESPONSE_ERROR = "QQ response is error";
-    // private static final String QZONE_SHARE_ERROR = "QZone share is error";
+    private static final String QZONE_SHARE_ERROR = "QZone share is error";
     private static final String QZONE_SHARE_CANCEL = "QZone share is cancelled";
-    // private static final String QQFAVORITES_ERROR = "QQ Favorites is error";
+    private static final String QQFAVORITES_ERROR = "QQ Favorites is error";
     private static final String QQFAVORITES_CANCEL = "QQ Favorites is cancelled";
     private static final String QQ_Client_NOT_INSYALLED_ERROR = "QQ client is not installed";
     private static final String TITLIE_IS_EMPTY = "share title is empty";
@@ -44,8 +48,8 @@ public class YCQQ extends CordovaPlugin {
     protected void pluginInitialize() {
         super.pluginInitialize();
         APP_ID = webView.getPreferences().getString(QQ_APP_ID, "");
-        mTencent = Tencent.createInstance(APP_ID, this.cordova.getActivity()
-                .getApplicationContext());
+        context = this.cordova.getActivity().getApplicationContext();
+        mTencent = Tencent.createInstance(APP_ID, context);
     }
 
     @Override
@@ -80,27 +84,27 @@ public class YCQQ extends CordovaPlugin {
      */
     private boolean ssoLogin(CallbackContext callbackContext) {
         currentCallbackContext = callbackContext;
-        if (mTencent.isSessionValid()) {
-            JSONObject jo = makeJson(mTencent.getAccessToken(),
-                    mTencent.getOpenId());
-            this.webView.sendPluginResult(new PluginResult(
-                    PluginResult.Status.OK, jo), callbackContext.getCallbackId());
-            return true;
-        } else {
+        //if (mTencent.isSessionValid()) {
+        //    JSONObject jo = makeJson(mTencent.getAccessToken(),
+        //            mTencent.getOpenId());
+        //    this.webView.sendPluginResult(new PluginResult(
+        //            PluginResult.Status.OK, jo), callbackContext.getCallbackId());
+        //    return true;
+        //} else {
             Runnable runnable = new Runnable() {
 
                 @Override
                 public void run() {
                     mTencent.login(YCQQ.this.cordova.getActivity(), "all",
                             loginListener);
-//					mTencent.loginServerSide(YCQQ.this.cordova.getActivity(), "all",
-//							loginListener);
+        //          mTencent.loginServerSide(YCQQ.this.cordova.getActivity(), "all",
+        //                      loginListener);
                 }
             };
             this.cordova.getActivity().runOnUiThread(runnable);
             this.cordova.setActivityResultCallback(this);
             return true;
-        }
+        //}
 
     }
 
@@ -295,17 +299,55 @@ public class YCQQ extends CordovaPlugin {
                 return;
             }
             initOpenidAndToken(jsonResponse);
-            JSONObject jo = makeJson(mTencent.getAccessToken(),
-                    mTencent.getOpenId());
-            YCQQ.this.webView.sendPluginResult(new PluginResult(
-                    PluginResult.Status.OK, jo), currentCallbackContext.getCallbackId());
+            //JSONObject jo = makeJson(mTencent.getAccessToken(),
+            //        mTencent.getOpenId());
+
+            qqRes=(JSONObject)response;
+            UserInfo qqInfo = new UserInfo(context, mTencent.getQQToken());
+            qqInfo.getUserInfo(new IUiListener() {
+
+                @Override
+                public void onError(UiError arg0) {
+                    // TODO Auto-generated method stub
+
+                    YCQQ.this.webView.sendPluginResult(new PluginResult(
+                            PluginResult.Status.ERROR, QQ_LOGIN_ERROR), currentCallbackContext.getCallbackId());
+                }
+
+                @Override
+                public void onComplete(Object json) {
+                    // TODO Auto-generated method stub
+                    try{
+                        String access_token=qqRes.getString("access_token").toString();
+                        String openid=qqRes.getString("openid").toString();
+
+                        JSONObject qqJson=(JSONObject)json;
+                        qqJson.put("access_token",access_token);
+                        qqJson.put("openid",openid);
+                        //mCallbackContext.success(qqJson);
+                        YCQQ.this.webView.sendPluginResult(new PluginResult(
+                                PluginResult.Status.OK, qqJson), currentCallbackContext.getCallbackId());
+                    }
+                    catch(JSONException e){
+                    }
+                }
+
+                @Override
+                public void onCancel() {
+                    // TODO Auto-generated method stub
+
+                    YCQQ.this.webView.sendPluginResult(new PluginResult(
+                            PluginResult.Status.ERROR, QQ_CANCEL_BY_USER), currentCallbackContext.getCallbackId());
+                }
+            });
+            //YCQQ.this.webView.sendPluginResult(new PluginResult(
+            //        PluginResult.Status.OK, jo), currentCallbackContext.getCallbackId());
         }
 
         @Override
-        public void onError(UiError e) {
-            String msg = String.format("[%1$d]%2$s: %3$s", e.errorCode, e.errorMessage, e.errorDetail);
+        public void onError(UiError uiError) {
             YCQQ.this.webView.sendPluginResult(new PluginResult(
-                    PluginResult.Status.ERROR, msg), currentCallbackContext.getCallbackId());
+                    PluginResult.Status.ERROR, QQ_LOGIN_ERROR), currentCallbackContext.getCallbackId());
         }
 
         @Override
@@ -332,9 +374,8 @@ public class YCQQ extends CordovaPlugin {
 
         @Override
         public void onError(UiError e) {
-            String msg = String.format("[%1$d]%2$s: %3$s", e.errorCode, e.errorMessage, e.errorDetail);
             YCQQ.this.webView.sendPluginResult(new PluginResult(
-                    PluginResult.Status.ERROR, msg), currentCallbackContext.getCallbackId());
+                    PluginResult.Status.ERROR, QQ_SHARE_ERROR), currentCallbackContext.getCallbackId());
         }
 
     };
@@ -351,9 +392,8 @@ public class YCQQ extends CordovaPlugin {
 
         @Override
         public void onError(UiError e) {
-            String msg = String.format("[%1$d]%2$s: %3$s", e.errorCode, e.errorMessage, e.errorDetail);
             YCQQ.this.webView.sendPluginResult(new PluginResult(
-                    PluginResult.Status.ERROR, msg), currentCallbackContext.getCallbackId());
+                    PluginResult.Status.ERROR, QZONE_SHARE_ERROR), currentCallbackContext.getCallbackId());
         }
 
         @Override
@@ -381,9 +421,8 @@ public class YCQQ extends CordovaPlugin {
 
         @Override
         public void onError(UiError e) {
-            String msg = String.format("[%1$d]%2$s: %3$s", e.errorCode, e.errorMessage, e.errorDetail);
             YCQQ.this.webView.sendPluginResult(new PluginResult(
-                    PluginResult.Status.ERROR, msg), currentCallbackContext.getCallbackId());
+                    PluginResult.Status.ERROR, QQFAVORITES_ERROR), currentCallbackContext.getCallbackId());
         }
     };
 
